@@ -46,6 +46,25 @@ class UsuarioRepository:
         if resultado is None:
             return None
         return Usuario(resultado[0], resultado[1], resultado[2], resultado[3], resultado[4], resultado[5])
+    
+    def buscar_por_id(self, id):
+        conexao = self.banco.conectar()
+        cursor = conexao.cursor()
 
-
+        cursor.execute(
+            "SELECT * FROM usuarios WHERE id = ?",
+            (id,)
+        )
+        resultado = cursor.fetchone()
+        conexao.close()
+        if resultado is None:
+            return None
+        return Usuario(
+            resultado[0],
+            resultado[1],
+            resultado[2],
+            resultado[3],
+            resultado[4],
+            resultado[5]
+        )
 

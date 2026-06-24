@@ -9,6 +9,7 @@ cliente.connect(
     ("127.0.0.1", 5000)
 )
 
+# Login
 cliente.send(
     "LOGIN;nicolas;hash_teste".encode()
 )
@@ -16,5 +17,30 @@ cliente.send(
 resposta = cliente.recv(1024)
 
 print(
+    "Servidor:",
     resposta.decode()
 )
+
+# Loop de testes
+while True:
+    mensagem = input("> ")
+
+    if mensagem == "sair":
+        break
+
+    cliente.send(
+        mensagem.encode()
+    )
+
+    try:
+        resposta = cliente.recv(1024)
+
+        if resposta:
+            print(
+                "Servidor:",
+                resposta.decode()
+            )
+    except:
+        pass
+
+cliente.close()

@@ -3,10 +3,13 @@ from threading import Thread
 from rede.cliente_handler import ClienteHandler
 
 class ServidorSocket:
-    def __init__(self, usuario_repository):
+    def __init__(self, usuario_repository, conversa_service, mensagem_repository):
         self.host = "127.0.0.1"
         self.porta = 5000
         self.usuario_repository = usuario_repository
+        self.conversa_service = conversa_service
+        self.mensagem_repository = mensagem_repository
+        self.usuarios_online = {}
     
     def iniciar(self):
         servidor = socket.socket(
@@ -23,7 +26,10 @@ class ServidorSocket:
             handler = ClienteHandler(
                 cliente_socket,
                 endereco,
-                self.usuario_repository
+                self.usuario_repository,
+                self.conversa_service,
+                self.mensagem_repository,
+                self.usuarios_online
             )
 
             thread = Thread(
