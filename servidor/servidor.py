@@ -19,7 +19,8 @@ conversa_service = ConversaService(
 
 servidor = ServidorSocket(
     usuario_repository, conversa_service,
-    mensagem_repository
+    mensagem_repository,
+    conversa_repository
 )
 
 servidor.iniciar()

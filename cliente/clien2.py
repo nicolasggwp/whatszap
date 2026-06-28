@@ -27,7 +27,7 @@ def receber():
 
 
 # -------- LOGIN --------
-cliente.send("AUTH;LOGIN;nicolas;hash_teste".encode())
+cliente.send("AUTH;;luck;hash123".encode())
 
 resposta = cliente.recv(1024)
 print("Servidor:", resposta.decode())
@@ -46,7 +46,7 @@ while True:
     if mensagem == "sair":
         break
 
-    cliente.send("CHAT;OPEN;2".encode())
+    cliente.send(f"CHAT;SEND;1;{mensagem}".encode())
 
 
 cliente.close()
