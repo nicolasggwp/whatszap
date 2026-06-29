@@ -30,8 +30,8 @@ class ServidorSocket:
                 self.usuario_repository,
                 self.conversa_service,
                 self.mensagem_repository,
-                self.usuarios_online,
-                self.conversa_repository
+                self.conversa_repository,
+                self.usuarios_online
             )
 
             thread = Thread(

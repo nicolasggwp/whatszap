@@ -2,7 +2,7 @@ from repository.mensagem_repository import *
 from repository.conversa_repository import *
 from repository.usuario_repository import *
 class ClienteHandler:
-    def __init__(self, cliente_socket, endereco, usuario_repository, conversa_service, mensagem_repository, usuarios_online, conversa_repository):
+    def __init__(self, cliente_socket, endereco, usuario_repository, conversa_service, mensagem_repository, conversa_repository, usuarios_online):
         self.cliente_socket = cliente_socket
         self.endereco = endereco
         self.usuario_repository = usuario_repository
@@ -14,7 +14,6 @@ class ClienteHandler:
 
     def executar(self):
         print(f"Cliente conectado: {self.endereco}")
-
         while True:
             dados = self.cliente_socket.recv(1024)
 
@@ -22,6 +21,7 @@ class ClienteHandler:
                 break
 
             mensagem = dados.decode()
+            
             print(mensagem)
             partes = mensagem.split(";")
             categoria = partes[0]
@@ -52,11 +52,12 @@ class ClienteHandler:
                     self.usuario = usuario
                     self.usuarios_online[usuario.id] = self.cliente_socket
                     print(self.usuarios_online)
+                    continue
                 else:
                     self.cliente_socket.send(
                         "CTRL;ERROR;LOGIN_ERRO".encode()
                     )
-            
+
             elif categoria == "AUTH" and acao == "REGISTER":
                 nome = partes[2]
                 username = partes[3]
@@ -78,6 +79,9 @@ class ClienteHandler:
                 self.cliente_socket.close()
                 break
 
+            elif self.usuario is None:
+                self.cliente_socket.send("CTRL;ERROR;NOT_AUTHENTICATED")
+                continue
             
             elif categoria == "CHAT" and acao == "SEND":
                 destinatario_id = int(partes[2])
@@ -99,6 +103,7 @@ class ClienteHandler:
                     socket_destino.send(f"MSG;RECEIVE;{self.usuario.username};{texto}".encode())
             
             elif categoria == "CHAT" and acao == "LIST":
+                print("oiiii")
                 conversas = self.conversa_repository.buscar_por_usuario(self.usuario.id)
                 for conversa in conversas:
                     if conversa.usuario1_id == self.usuario.id:
@@ -107,10 +112,8 @@ class ClienteHandler:
                         outro_id = conversa.usuario1_id
 
                     outro_usuario = self.usuario_repository.buscar_por_id(outro_id)
-                    self.cliente_socket.send(
-                        f"CHAT;CONVERSA;{outro_usuario.id};{outro_usuario.username}".encode())
-                self.cliente_socket.send("CHAT;LIST_END".encode()
-)
+                    self.cliente_socket.send(f"CHAT;CONVERSA;{outro_usuario.id};{outro_usuario.username}\n".encode())
+                self.cliente_socket.send("CHAT;LIST_END\n".encode())
 
             elif categoria == "CHAT" and acao == "OPEN":
                 destinatario_id = int(partes[2])
@@ -124,8 +127,9 @@ class ClienteHandler:
                 conversa = self.conversa_service.obter_ou_criar_conversa(self.usuario.id, destinatario_id)
                 mensagens = self.mensagem_repository.listar_por_conversa(conversa.id)
                 for mensagem in mensagens:
-                    self.cliente_socket.send(
-                        f"CHAT;HISTORY;{mensagem.remetente_id};{mensagem.texto};{mensagem.data_envio}".encode())
+                    #self.cliente_socket.send(f"CHAT;HISTORY;{mensagem.remetente_id};{mensagem.texto};{mensagem.data_envio}".encode())
+                    self.cliente_socket.send(f"CHAT;HISTORY;{id};{mensagem.texto};{mensagem.data_envio}\n".encode())
+                    print(mensagem.texto)
                 self.cliente_socket.send("CHAT;HISTORY_END".encode())
             
         if self.usuario is not None:
