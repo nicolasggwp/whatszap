@@ -38,24 +38,25 @@ class ClienteHandler:
                     print("Usuário não encontrado")
 
                     self.cliente_socket.send(
-                        "LOGIN_ERRO".encode()
+                        "LOGIN_ERRO\n".encode()
                     )
 
                     continue
 
                 if usuario.senha_hash == senha:
                     print("Usuário encontrado")
-
-                    self.cliente_socket.send(
-                        "AUTH;SUCCESS;LOGIN_OK".encode()
-                    )
+                    
                     self.usuario = usuario
+                    self.cliente_socket.send(
+                        f"AUTH;SUCCESS;LOGIN_OK;{self.usuario.id}\n".encode()
+                    )
+                    
                     self.usuarios_online[usuario.id] = self.cliente_socket
                     print(self.usuarios_online)
                     continue
                 else:
                     self.cliente_socket.send(
-                        "CTRL;ERROR;LOGIN_ERRO".encode()
+                        "CTRL;ERROR;LOGIN_ERRO\n".encode()
                     )
 
             elif categoria == "AUTH" and acao == "REGISTER":
@@ -66,21 +67,21 @@ class ClienteHandler:
                 cep = partes[6]
                 if self.usuario_repository.buscar_por_username(username) is not None:
                     self.cliente_socket.send(
-                        "CTRL;ERROR;USERNAME_EXISTS".encode())
+                        "CTRL;ERROR;USERNAME_EXISTS\n".encode())
                     continue
                 if self.usuario_repository.buscar_por_email(email) is not None:
                     self.cliente_socket.send(
-                        "CTRL;ERROR;EMAIL_EXISTS".encode()
+                        "CTRL;ERROR;EMAIL_EXISTS\n".encode()
                     )
                     continue
                 usuario = Usuario(None, nome, username, email, senha, cep)
                 self.usuario_repository.salvar(usuario)
-                self.cliente_socket.send("CTRL;OK;REGISTER".encode())
+                self.cliente_socket.send("CTRL;OK;REGISTER\n".encode())
                 self.cliente_socket.close()
                 break
 
             elif self.usuario is None:
-                self.cliente_socket.send("CTRL;ERROR;NOT_AUTHENTICATED")
+                self.cliente_socket.send("CTRL;ERROR;NOT_AUTHENTICATED\n")
                 continue
             
             elif categoria == "CHAT" and acao == "SEND":
@@ -91,7 +92,7 @@ class ClienteHandler:
 
                 if destinatario is None:
                     self.cliente_socket.send(
-                        "CTRL;ERROR;USUARIO_NAO_EXISTE".encode()
+                        "CTRL;ERROR;USUARIO_NAO_EXISTE\n".encode()
                     )
                     continue
 
@@ -100,7 +101,7 @@ class ClienteHandler:
                 self.mensagem_repository.salvar(mensagem)
                 socket_destino = self.usuarios_online.get(destinatario_id)
                 if socket_destino is not None:
-                    socket_destino.send(f"MSG;RECEIVE;{self.usuario.username};{texto}".encode())
+                    socket_destino.send(f"MSG;RECEIVE;{self.usuario.id};{texto}\n".encode())
             
             elif categoria == "CHAT" and acao == "LIST":
                 print("oiiii")
@@ -120,7 +121,7 @@ class ClienteHandler:
                 destinatario = self.usuario_repository.buscar_por_id(destinatario_id)
                 if destinatario is None:
                     self.cliente_socket.send(
-                        "CTRL;ERROR;USER_NOT_FOUND".encode()
+                        "CTRL;ERROR;USER_NOT_FOUND\n".encode()
                     )
                     continue
                 
@@ -128,9 +129,9 @@ class ClienteHandler:
                 mensagens = self.mensagem_repository.listar_por_conversa(conversa.id)
                 for mensagem in mensagens:
                     #self.cliente_socket.send(f"CHAT;HISTORY;{mensagem.remetente_id};{mensagem.texto};{mensagem.data_envio}".encode())
-                    self.cliente_socket.send(f"CHAT;HISTORY;{id};{mensagem.texto};{mensagem.data_envio}\n".encode())
+                    self.cliente_socket.send(f"CHAT;HISTORY;{mensagem.remetente_id};{mensagem.texto};{mensagem.data_envio}\n".encode())
                     print(mensagem.texto)
-                self.cliente_socket.send("CHAT;HISTORY_END".encode())
+                self.cliente_socket.send("CHAT;HISTORY_END\n".encode())
             
         if self.usuario is not None:
             self.usuarios_online.pop(
