@@ -165,22 +165,16 @@ class ClienteHandler:
                 self.cliente_socket.send("CHAT;LIST_END\n".encode())
 
             elif categoria == "CHAT" and acao == "OPEN":
-                username = partes[3]
-                print(username)
-                destinatario = self.usuario_repository.buscar_por_username(
-                    username
-                )
+                destinatario_id = int(partes[2])
+
+                destinatario = self.usuario_repository.buscar_por_id(destinatario_id)
 
                 if destinatario is None:
-                    self.cliente_socket.send(
-                        "CTRL;ERROR;USER_NOT_FOUND\n".encode()
-                    )
+                    self.cliente_socket.send("CTRL;ERROR;USER_NOT_FOUND\n".encode())
                     continue
 
                 if destinatario.id == self.usuario.id:
-                    self.cliente_socket.send(
-                        "CTRL;ERROR;SELF_CHAT\n".encode()
-                    )
+                    self.cliente_socket.send("CTRL;ERROR;SELF_CHAT\n".encode())
                     continue
 
                 conversa = self.conversa_service.obter_ou_criar_conversa(
@@ -188,19 +182,15 @@ class ClienteHandler:
                     destinatario.id
                 )
 
-                mensagens = self.mensagem_repository.listar_por_conversa(
-                    conversa.id
-                )
+                mensagens = self.mensagem_repository.listar_por_conversa(conversa.id)
 
                 for mensagem in mensagens:
                     self.cliente_socket.send(
-                        f"CHAT;HISTORY;{mensagem.remetente_id};{mensagem.texto};{mensagem.data_envio}\n".encode()
+                        f"CHAT;HISTORY;{mensagem.remetente_id};{mensagem.texto}\n".encode()
                     )
 
-                self.cliente_socket.send(
-                    "CHAT;HISTORY_END\n".encode()
-                )
-            
+                self.cliente_socket.send("CHAT;HISTORY_END\n".encode())
+                        
             elif categoria == "USER" and acao == "UPDATE":
                 nome = partes[2]
                 email = partes[3]
