@@ -1,6 +1,19 @@
 from repository.mensagem_repository import *
 from repository.conversa_repository import *
 from repository.usuario_repository import *
+import bcrypt
+import re
+import requests
+
+def senha_forte(senha):
+    return (
+        len(senha) >= 8 and
+        re.search(r"[A-Z]", senha) and
+        re.search(r"[a-z]", senha) and
+        re.search(r"\d", senha) and
+        re.search(r"[!@#$%^&*(),.?\":{}|<>]", senha)
+    )
+
 class ClienteHandler:
     def __init__(self, cliente_socket, endereco, usuario_repository, conversa_service, mensagem_repository, conversa_repository, usuarios_online):
         self.cliente_socket = cliente_socket
@@ -43,14 +56,17 @@ class ClienteHandler:
 
                     continue
 
-                if usuario.senha_hash == senha:
+                if bcrypt.checkpw(
+                    senha.encode(),
+                    usuario.senha_hash.encode()
+                ):
                     print("Usuário encontrado")
                     
                     self.usuario = usuario
                     self.cliente_socket.send(
-                        f"AUTH;SUCCESS;LOGIN_OK;{self.usuario.id}\n".encode()
+                        f"AUTH;SUCCESS;LOGIN_OK;{self.usuario.id};{self.usuario.nome};{self.usuario.username};{self.usuario.email};{self.usuario.cep}\n".encode()
                     )
-                    
+                   
                     self.usuarios_online[usuario.id] = self.cliente_socket
                     print(self.usuarios_online)
                     continue
@@ -65,6 +81,13 @@ class ClienteHandler:
                 email = partes[4]
                 senha = partes[5]
                 cep = partes[6]
+
+                if not senha_forte(senha):
+                    self.cliente_socket.send(
+                        "CTRL;ERROR;WEAK_PASSWORD\n".encode()
+                    )
+                    continue
+
                 if self.usuario_repository.buscar_por_username(username) is not None:
                     self.cliente_socket.send(
                         "CTRL;ERROR;USERNAME_EXISTS\n".encode())
@@ -74,11 +97,36 @@ class ClienteHandler:
                         "CTRL;ERROR;EMAIL_EXISTS\n".encode()
                     )
                     continue
-                usuario = Usuario(None, nome, username, email, senha, cep)
+
+                resposta = requests.get(
+                f"https://viacep.com.br/ws/{cep}/json/")
+
+                dados = resposta.json()
+
+                if "erro" in dados:
+                    self.cliente_socket.send(
+                        "CTRL;ERROR;INVALID_CEP\n".encode()
+                    )
+                    continue
+
+                senha_hash = bcrypt.hashpw(
+                    senha.encode(),
+                    bcrypt.gensalt()
+                ).decode()
+
+                usuario = Usuario(
+                    None,
+                    nome,
+                    username,
+                    email,
+                    senha_hash,
+                    cep
+                )
                 self.usuario_repository.salvar(usuario)
                 self.cliente_socket.send("CTRL;OK;REGISTER\n".encode())
-                self.cliente_socket.close()
-                break
+                self.cliente_socket.send("CTRL;OK;REGISTER\n".encode()
+                )
+                continue
 
             elif self.usuario is None:
                 self.cliente_socket.send("CTRL;ERROR;NOT_AUTHENTICATED\n")
@@ -117,21 +165,66 @@ class ClienteHandler:
                 self.cliente_socket.send("CHAT;LIST_END\n".encode())
 
             elif categoria == "CHAT" and acao == "OPEN":
-                destinatario_id = int(partes[2])
-                destinatario = self.usuario_repository.buscar_por_id(destinatario_id)
+                username = partes[3]
+                print(username)
+                destinatario = self.usuario_repository.buscar_por_username(
+                    username
+                )
+
                 if destinatario is None:
                     self.cliente_socket.send(
                         "CTRL;ERROR;USER_NOT_FOUND\n".encode()
                     )
                     continue
-                
-                conversa = self.conversa_service.obter_ou_criar_conversa(self.usuario.id, destinatario_id)
-                mensagens = self.mensagem_repository.listar_por_conversa(conversa.id)
+
+                if destinatario.id == self.usuario.id:
+                    self.cliente_socket.send(
+                        "CTRL;ERROR;SELF_CHAT\n".encode()
+                    )
+                    continue
+
+                conversa = self.conversa_service.obter_ou_criar_conversa(
+                    self.usuario.id,
+                    destinatario.id
+                )
+
+                mensagens = self.mensagem_repository.listar_por_conversa(
+                    conversa.id
+                )
+
                 for mensagem in mensagens:
-                    #self.cliente_socket.send(f"CHAT;HISTORY;{mensagem.remetente_id};{mensagem.texto};{mensagem.data_envio}".encode())
-                    self.cliente_socket.send(f"CHAT;HISTORY;{mensagem.remetente_id};{mensagem.texto};{mensagem.data_envio}\n".encode())
-                    print(mensagem.texto)
-                self.cliente_socket.send("CHAT;HISTORY_END\n".encode())
+                    self.cliente_socket.send(
+                        f"CHAT;HISTORY;{mensagem.remetente_id};{mensagem.texto};{mensagem.data_envio}\n".encode()
+                    )
+
+                self.cliente_socket.send(
+                    "CHAT;HISTORY_END\n".encode()
+                )
+            
+            elif categoria == "USER" and acao == "UPDATE":
+                nome = partes[2]
+                email = partes[3]
+                cep = partes[4]
+
+                self.usuario.nome = nome
+                self.usuario.email = email
+                self.usuario.cep = cep
+
+                self.usuario_repository.atualizar(self.usuario)
+
+                self.cliente_socket.send(
+                    "USER;UPDATE_OK\n".encode()
+                )
+            
+            elif categoria == "USER" and acao == "DELETE":
+                self.usuario_repository.remover(self.usuario.id)
+
+                self.cliente_socket.send(
+                    "USER;DELETE_OK\n".encode()
+                )
+
+                self.cliente_socket.close()
+                break
             
         if self.usuario is not None:
             self.usuarios_online.pop(

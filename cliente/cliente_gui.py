@@ -3,6 +3,10 @@ import socket
 from threading import Thread
 from datetime import datetime 
 from tkinter import ttk
+import requests
+import re
+from models.usuario import *
+from tkinter import messagebox
 
 class Cliente:
     def __init__(self):
@@ -66,7 +70,7 @@ class App:
 
         self.frames = {}
 
-        for F in (HomeFrame, LoginFrame, RegisterFrame, ListaFrame, ChatFrame):
+        for F in (HomeFrame, LoginFrame, RegisterFrame, ListaFrame, ChatFrame, PerfilFrame):
             frame = F(container, self)
             self.frames[F] = frame
             frame.grid(row=0, column=0, sticky="nsew")
@@ -201,20 +205,36 @@ class LoginFrame(tk.Frame):
         self.app.cliente.send(f"AUTH;LOGIN;{user};{pwd}")
     
     def processar_mensagem(self, msg):
-        partes = msg.strip().split(";")
+        msg = msg.strip()
+        partes = msg.split(";")
 
         if (
-            len(partes) >= 4 and
+            len(partes) >= 8 and
             partes[0] == "AUTH" and
             partes[1] == "SUCCESS" and
             partes[2] == "LOGIN_OK"
         ):
-            self.app.user_id = partes[3]
+            self.app.usuario = Usuario(
+                int(partes[3]),   # id
+                partes[4],        # nome
+                partes[5],        # username
+                partes[6],        # email
+                "",               # senha_hash
+                partes[7]         # cep
+            )
 
-            self.app.root.after(0, self.login_ok)
+            self.app.user_id = self.app.usuario.id
+
+            self.app.root.after(
+                0,
+                self.login_ok
+            )
 
         elif msg == "CTRL;ERROR;LOGIN_ERRO":
-            self.app.root.after(0, self.login_erro)
+            self.app.root.after(
+                0,
+                self.login_erro
+            )
     
     def login_ok(self):
         self.status.config(
@@ -325,6 +345,8 @@ class RegisterFrame(tk.Frame):
         email = self.email.get()
         pwd = self.passw.get()
         cep = self.cep.get()
+
+        
         if not user or not pwd or not nome or not email or not cep:
             self.app.root.after(0, lambda: self.status.config(text="Preencha todos os campos!", fg=self.app.colors['danger']))
             return
@@ -335,6 +357,15 @@ class RegisterFrame(tk.Frame):
         if msg == "CTRL;OK;REGISTER":
             self.app.root.after(0, self.register_ok)
 
+        elif msg == "CTRL;ERROR;WEAK_PASSWORD":
+            self.app.root.after(0, self.senha_fraca)
+
+        elif msg == "CTRL;ERROR;INVALID_CEP":
+            self.status.config(
+                text="❌ CEP inválido!",
+                fg=self.app.colors['danger']
+            )
+        
         elif msg == "CTRL;ERROR;USERNAME_EXISTS":
             self.app.root.after(0, self.username_exists)
 
@@ -350,6 +381,13 @@ class RegisterFrame(tk.Frame):
         self.app.root.after(
             2000,
             lambda: self.app.show(LoginFrame)
+        )
+
+
+    def senha_fraca(self):
+        self.status.config(
+            text="❌ Senha fraca! Use 8+ caracteres, maiúscula, minúscula, número e símbolo.",
+            fg=self.app.colors['danger']
         )
 
 
@@ -401,6 +439,14 @@ class ListaFrame(tk.Frame):
                           cursor='hand2')
         btn_new.pack(side="bottom", fill="x", padx=20, pady=(0, 20))
 
+        tk.Button(
+        self,
+        text="👤 Meu Perfil",
+        command=lambda: self.app.show(PerfilFrame),
+        bg=self.app.colors['primary'],
+        fg="white"
+    ).pack(side="bottom", fill="x", padx=20, pady=(0,10))
+
     def tkraise(self, aboveThis=None):
         super().tkraise(aboveThis)
         self.carregar_conversas()
@@ -408,10 +454,6 @@ class ListaFrame(tk.Frame):
   
     def carregar_conversas(self):
         self.conversas_temp = []
-
-        for w in self.list_frame.winfo_children():
-            w.destroy()
-
         self.app.cliente.send("CHAT;LIST")
 
     def _render(self, conversas):
@@ -435,12 +477,12 @@ class ListaFrame(tk.Frame):
                           bd=1,
                           pady=10,
                           anchor='w',
-                          command=lambda u=uid: self.abrir_chat(u))
+                          command=lambda u=uid, n=nome: self.abrir_chat(u, n))
             btn.pack(fill="x", pady=3)
 
-    def abrir_chat(self, user_id):
+    def abrir_chat(self, uid, username):
         chat = self.app.frames[ChatFrame]
-        chat.abrir(user_id)
+        chat.abrir(uid, username)
         self.app.show(ChatFrame)
 
     def nova_conversa(self):
@@ -449,7 +491,7 @@ class ListaFrame(tk.Frame):
         popup.geometry("300x150")
         popup.configure(bg=self.app.colors['bg'])
 
-        tk.Label(popup, text="ID do usuário:", 
+        tk.Label(popup, text="Username do usuário:",
                 font=("Segoe UI", 11),
                 bg=self.app.colors['bg']).pack(pady=20)
 
@@ -457,12 +499,20 @@ class ListaFrame(tk.Frame):
         entry.pack(pady=10, padx=20, fill="x")
 
         def abrir():
-            uid = entry.get()
-            if uid:
-                popup.destroy()
-                self.abrir_chat(uid)
+            username = entry.get().strip()
 
-        tk.Button(popup, text="Abrir conversa", 
+            if not username:
+                return
+
+            if username == self.app.usuario.username:
+                messagebox.showerror("Erro", "Você não pode conversar consigo mesmo.")
+                return
+
+            popup.destroy()
+            self.abrir_chat(username)
+
+        tk.Button(popup,
+                text="Abrir conversa",
                 command=abrir,
                 bg=self.app.colors['primary'],
                 fg='white',
@@ -485,6 +535,25 @@ class ListaFrame(tk.Frame):
                 0,
                 lambda: self._render(self.conversas_temp)
             )
+        
+        elif msg == "CTRL;ERROR;SELF_CHAT":
+            self.app.root.after(
+                0,
+                lambda: messagebox.showerror(
+                    "Erro",
+                    "Você não pode conversar consigo mesmo."
+                )
+            )
+
+        elif msg == "CTRL;ERROR;USER_NOT_FOUND":
+            self.app.root.after(
+                0,
+                lambda: messagebox.showerror(
+                    "Erro",
+                    "Usuário não encontrado."
+                )
+            )
+        
 
 class ChatFrame(tk.Frame):
     def __init__(self, parent, app):
@@ -568,19 +637,17 @@ class ChatFrame(tk.Frame):
         self.chat_id = None
         self.app.show(ListaFrame)
 
-    def abrir(self, user_id):
+    def abrir(self, user_id, username):
         self.chat_id = user_id
-        self.title.config(text=f"💬 Chat com {user_id}")
-
+        self.title.config(text=f"💬 {username}")
         self.limpar()
-        self.app.cliente.send(f"CHAT;OPEN;{self.chat_id}")
-
-    
+        self.app.cliente.send(f"CHAT;OPEN;{user_id}")
+        
     def adicionar_mensagem(self, sender, msg):
         msg_frame = tk.Frame(self.scrollable_frame, bg=self.app.colors['bg'])
         msg_frame.pack(fill="x", pady=3)
 
-        is_me = sender == str(self.app.user_id)
+        is_me = int(sender) == self.app.user_id
 
         bubble = tk.Frame(msg_frame, 
                         bg=self.app.colors['message_me'] if is_me else self.app.colors['message_other'],
@@ -647,7 +714,163 @@ class ChatFrame(tk.Frame):
                             self.adicionar_mensagem(s, t)
                     )
 
+class PerfilFrame(tk.Frame):
+    def __init__(self, parent, app):
+        super().__init__(parent, bg=app.colors['bg'])
+        self.app = app
+
+        self.app.cliente.add_callback(
+            self.processar_mensagem
+        )
+
+        center_frame = tk.Frame(
+            self,
+            bg=app.colors['bg']
+        )
+        center_frame.place(
+            relx=0.5,
+            rely=0.5,
+            anchor="center"
+        )
+
+        tk.Label(
+            center_frame,
+            text="👤 MEU PERFIL",
+            font=("Segoe UI", 24, "bold"),
+            fg=app.colors['secondary'],
+            bg=app.colors['bg']
+        ).pack(pady=20)
+
+        # Nome
+        tk.Label(
+            center_frame,
+            text="Nome",
+            bg=app.colors['bg']
+        ).pack(anchor="w")
+
+        self.nome = tk.Entry(
+            center_frame,
+            width=35
+        )
+        self.nome.pack(pady=5)
+
+        # Username
+        tk.Label(
+            center_frame,
+            text="Username",
+            bg=app.colors['bg']
+        ).pack(anchor="w")
+
+        self.username = tk.Entry(
+            center_frame,
+            width=35,
+            state="disabled"
+        )
+        self.username.pack(pady=5)
+
+        # Email
+        tk.Label(
+            center_frame,
+            text="Email",
+            bg=app.colors['bg']
+        ).pack(anchor="w")
+
+        self.email = tk.Entry(
+            center_frame,
+            width=35
+        )
+        self.email.pack(pady=5)
+
+        # CEP
+        tk.Label(
+            center_frame,
+            text="CEP",
+            bg=app.colors['bg']
+        ).pack(anchor="w")
+
+        self.cep = tk.Entry(
+            center_frame,
+            width=35
+        )
+        self.cep.pack(pady=5)
+
+        self.status = tk.Label(
+            center_frame,
+            text="",
+            bg=app.colors['bg']
+        )
+        self.status.pack(pady=10)
+
+        tk.Button(
+            center_frame,
+            text="💾 Salvar alterações",
+            command=self.salvar,
+            bg=app.colors['primary'],
+            fg="white",
+            width=25
+        ).pack(pady=5)
+
+        tk.Button(
+            center_frame,
+            text="🗑 Excluir conta",
+            command=self.excluir,
+            bg=app.colors['danger'],
+            fg="white",
+            width=25
+        ).pack(pady=5)
+
+        tk.Button(
+            center_frame,
+            text="← Voltar",
+            command=lambda: app.show(ListaFrame),
+            width=25
+        ).pack(pady=5)
+    
+    def tkraise(self, aboveThis=None):
+        super().tkraise(aboveThis)
+
+        self.nome.delete(0, "end")
+        self.nome.insert(0, self.app.usuario.nome)
+
+        self.username.config(state="normal")
+        self.username.delete(0, "end")
+        self.username.insert(0, self.app.usuario.username)
+        self.username.config(state="disabled")
+
+        self.email.delete(0, "end")
+        self.email.insert(0, self.app.usuario.email)
+
+        self.cep.delete(0, "end")
+        self.cep.insert(0, self.app.usuario.cep)
 
 
+    def salvar(self):
+        nome = self.nome.get()
+        email = self.email.get()
+        cep = self.cep.get()
 
+        self.app.cliente.send(
+            f"USER;UPDATE;{nome};{email};{cep}"
+        )
+    
+    def excluir(self):
+        self.app.cliente.send(
+            "USER;DELETE"
+        )
+    
+    def processar_mensagem(self, msg):
+        msg = msg.strip()
+
+        if msg == "USER;UPDATE_OK":
+            self.status.config(
+                text="Dados atualizados com sucesso!",
+                fg=self.app.colors['primary']
+            )
+
+            self.app.usuario.nome = self.nome.get()
+            self.app.usuario.email = self.email.get()
+            self.app.usuario.cep = self.cep.get()
+
+        elif msg == "USER;DELETE_OK":
+            self.app.show(HomeFrame)
 App().run()

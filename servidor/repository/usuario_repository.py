@@ -68,3 +68,33 @@ class UsuarioRepository:
             resultado[5]
         )
 
+    def atualizar(self, usuario):
+        conexao = self.banco.conectar()
+        cursor = conexao.cursor()
+
+        cursor.execute("""
+            UPDATE usuarios
+            SET nome = ?, email = ?, cep = ?
+            WHERE id = ?
+        """, (
+            usuario.nome,
+            usuario.email,
+            usuario.cep,
+            usuario.id
+        ))
+
+        conexao.commit()
+        conexao.close()
+    
+    def remover(self, usuario_id):
+        conexao = self.banco.conectar()
+        cursor = conexao.cursor()
+
+        cursor.execute(
+            "DELETE FROM usuarios WHERE id = ?",
+            (usuario_id,)
+        )
+
+        conexao.commit()
+        conexao.close()
+
