@@ -270,6 +270,19 @@ class ClienteHandler:
 
                 self.cliente_socket.close()
                 break
+
+            elif categoria == "USER" and acao == "FIND":
+                username = partes[2]
+
+                usuario = self.usuario_repository.buscar_por_username(username)
+
+                if usuario is None:
+                    self.cliente_socket.send("USER;NOT_FOUND\n".encode())
+                    continue
+
+                self.cliente_socket.send(
+                    f"USER;FOUND;{usuario.id};{usuario.username}\n".encode()
+                )
             
         # LIMPEZA FINAL
         if self.usuario is not None:

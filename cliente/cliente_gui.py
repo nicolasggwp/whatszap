@@ -564,7 +564,8 @@ class ListaFrame(tk.Frame):
                 return
 
             popup.destroy()
-            self.abrir_chat(username)
+            self.app.cliente.send(f"USER;FIND;{username}")
+            self.username_temp = username
 
         tk.Button(popup,
                 text="Abrir conversa",
@@ -608,6 +609,12 @@ class ListaFrame(tk.Frame):
                     "Usuário não encontrado."
                 )
             )
+        
+        if partes[0] == "USER" and partes[1] == "FOUND":
+            uid = partes[2]
+            username = partes[3]
+
+            self.abrir_chat(uid, username)
         
 
 #chat
