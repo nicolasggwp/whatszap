@@ -1,3 +1,4 @@
+# IMPORTAÇÕES DE BIBLIOTECAS
 import tkinter as tk
 import socket
 from threading import Thread
@@ -8,40 +9,55 @@ import re
 from models.usuario import *
 from tkinter import messagebox
 
+# CLIENTE SOCKET (REDE)
 class Cliente:
     def __init__(self):
+        # Cria socket TCP/IP
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Conecta no servidor local (127.0.0.1:5000)
         self.socket.connect(("127.0.0.1", 5000))
+        # Lista de funções que serão chamadas quando chegar mensagem
         self.callbacks = []
+        # Inicia listener de mensagens do servidor
         self.start_listener()
 
     def send(self, msg):
+        # Envia mensagem codificada para o servidor
         self.socket.send(msg.encode())
     
     def add_callback(self, callback):
+        # Registra função que será chamada ao receber mensagem
         self.callbacks.append(callback)
     
     def start_listener(self):
+        # Thread separada para ouvir mensagens sem travar a interface
         def loop():
+            # buffer para montar mensagens completas
             buffer = ""
 
             while True:
                 try:
+                    # buffer para montar mensagens completas
                     buffer += self.socket.recv(1024).decode()
 
+                    # Enquanto houver mensagens completas separadas por "\n"
                     while "\n" in buffer:
                         msg, buffer = buffer.split("\n", 1)
 
+                        
                         for cb in self.callbacks:
                             cb(msg)
 
+                # Se der erro (ex: conexão fechada), sai do loop
                 except:
                     break
 
         Thread(target=loop, daemon=True).start()
 
+# APLICAÇÃO PRINCIPAL
 class App:
     def __init__(self):
+        # Inicializa cliente de rede
         self.cliente = Cliente()
 
         self.root = tk.Tk()
@@ -68,8 +84,10 @@ class App:
         container = tk.Frame(self.root, bg=self.colors['bg'])
         container.pack(fill="both", expand=True)
 
+        # Dicionário de telas
         self.frames = {}
-
+        
+        # Cria todas as telas do sistema
         for F in (HomeFrame, LoginFrame, RegisterFrame, ListaFrame, ChatFrame, PerfilFrame):
             frame = F(container, self)
             self.frames[F] = frame
@@ -78,16 +96,19 @@ class App:
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
 
+        # Tela inicial
         self.show(HomeFrame)
 
+    # Troca de tela (levanta frame escolhido)
     def show(self, frame_class):
         self.frames[frame_class].tkraise()
 
+    # Inicia loop da interface
     def run(self):
         self.root.mainloop()
 
 
-
+# TELA INICIAL
 class HomeFrame(tk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent, bg=app.colors['bg'])
@@ -109,6 +130,7 @@ class HomeFrame(tk.Frame):
                 fg="gray",
                 bg=app.colors['bg']).pack(pady=(0, 30))
 
+        # Botões padrão
         btn_style = {
             'width': 25,
             'height': 2,
@@ -117,6 +139,7 @@ class HomeFrame(tk.Frame):
             'cursor': 'hand2'
         }
 
+        # Botão login
         btn_login = tk.Button(center_frame, text="🔑 Login", 
                             command=lambda: app.show(LoginFrame),
                             bg=app.colors['primary'],
@@ -124,6 +147,7 @@ class HomeFrame(tk.Frame):
                             **btn_style)
         btn_login.pack(pady=5)
 
+        #botao registro
         btn_register = tk.Button(center_frame, text="📝 Registrar", 
                                command=lambda: app.show(RegisterFrame),
                                bg=app.colors['secondary'],
@@ -132,16 +156,19 @@ class HomeFrame(tk.Frame):
         btn_register.pack(pady=5)
 
 
-
+# LOGIN
 class LoginFrame(tk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent, bg=app.colors['bg'])
         self.app = app
+        
+        # Registra callback de mensagens do servidor
         self.app.cliente.add_callback(self.processar_mensagem)
 
         center_frame = tk.Frame(self, bg=app.colors['bg'])
         center_frame.place(relx=0.5, rely=0.5, anchor="center")
 
+        #campos
         tk.Label(center_frame, text="🔐 LOGIN", 
                 font=("Segoe UI", 24, "bold"),
                 fg=app.colors['secondary'],
@@ -192,6 +219,7 @@ class LoginFrame(tk.Frame):
         self.status.pack(pady=10)
 
   
+    # Executa login em thread separada
     def login(self):
         Thread(target=self._login_thread).start()
 
@@ -205,9 +233,11 @@ class LoginFrame(tk.Frame):
         self.app.cliente.send(f"AUTH;LOGIN;{user};{pwd}")
     
     def processar_mensagem(self, msg):
+        # Pega dados
         msg = msg.strip()
         partes = msg.split(";")
 
+        # Validação simples
         if (
             len(partes) >= 8 and
             partes[0] == "AUTH" and
@@ -230,12 +260,14 @@ class LoginFrame(tk.Frame):
                 self.login_ok
             )
 
+        # Erro login
         elif msg == "CTRL;ERROR;LOGIN_ERRO":
             self.app.root.after(
                 0,
                 self.login_erro
             )
     
+    # Atualiza UI
     def login_ok(self):
         self.status.config(
             text="✅ Login OK!",
@@ -251,11 +283,13 @@ class LoginFrame(tk.Frame):
         )
 
 
-
+# REGISTRO
 class RegisterFrame(tk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent, bg=app.colors['bg'])
         self.app = app
+        
+        # Callback servidor
         self.app.cliente.add_callback(self.processar_mensagem)
 
         center_frame = tk.Frame(self, bg=app.colors['bg'])
@@ -271,6 +305,7 @@ class RegisterFrame(tk.Frame):
                 bg=app.colors['bg'],
                 fg=app.colors['text']).pack(anchor="w", pady=(10, 5))
 
+        #campos
         self.nome = tk.Entry(center_frame, font=("Segoe UI", 11),
                            relief='solid', bd=1, width=30)
         self.nome.pack(pady=(0, 10))
@@ -312,6 +347,7 @@ class RegisterFrame(tk.Frame):
                            relief='solid', bd=1, width=30)
         self.cep.pack(pady=(0, 10))
 
+        #Botoes
         btn_register = tk.Button(center_frame, text="Criar conta", 
                                command=self.register,
                                bg=app.colors['secondary'],
@@ -336,6 +372,7 @@ class RegisterFrame(tk.Frame):
                              bg=app.colors['bg'])
         self.status.pack(pady=10)
 
+    #faz o registro em uma thread separada
     def register(self):
         Thread(target=self._register_thread).start()
 
@@ -347,12 +384,15 @@ class RegisterFrame(tk.Frame):
         cep = self.cep.get()
 
         
+        #validação simples
         if not user or not pwd or not nome or not email or not cep:
             self.app.root.after(0, lambda: self.status.config(text="Preencha todos os campos!", fg=self.app.colors['danger']))
             return
 
+        #envia pro servidor
         self.app.cliente.send(f"AUTH;REGISTER;{nome};{user};{email};{pwd};{cep}")
 
+    #respostas do servidor
     def processar_mensagem(self, msg):
         if msg == "CTRL;OK;REGISTER":
             self.app.root.after(0, self.register_ok)
@@ -372,6 +412,7 @@ class RegisterFrame(tk.Frame):
         elif msg == "CTRL;ERROR;EMAIL_EXISTS":
             self.app.root.after(0, self.email_exists)
     
+    #abre tela de login
     def register_ok(self):
         self.status.config(
             text="✅ Conta criada!",
@@ -384,6 +425,7 @@ class RegisterFrame(tk.Frame):
         )
 
 
+    #Respostas do servidor no display
     def senha_fraca(self):
         self.status.config(
             text="❌ Senha fraca! Use 8+ caracteres, maiúscula, minúscula, número e símbolo.",
@@ -405,6 +447,7 @@ class RegisterFrame(tk.Frame):
         )
 
 
+# LISTA DE CONVERSAS
 class ListaFrame(tk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent, bg=app.colors['bg'])
@@ -429,6 +472,18 @@ class ListaFrame(tk.Frame):
         self.list_frame = tk.Frame(self.container, bg=app.colors['bg'])
         self.list_frame.pack(fill="both", expand=True)
 
+        tk.Button(
+            self,
+            text="❌ Sair do aplicativo",
+            command=self.app.root.destroy,  
+            bg=self.app.colors['danger'],
+            fg="white",
+            font=("Segoe UI", 11),
+            height=2,
+            relief='flat',
+            cursor='hand2'
+        ).pack(side="bottom", fill="x", padx=20, pady=(0, 10))
+        
         btn_new = tk.Button(self, text="➕ Nova conversa", 
                           command=self.nova_conversa,
                           bg=app.colors['secondary'],
@@ -555,6 +610,7 @@ class ListaFrame(tk.Frame):
             )
         
 
+#chat
 class ChatFrame(tk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent, bg=app.colors['bg'])
@@ -714,6 +770,7 @@ class ChatFrame(tk.Frame):
                             self.adicionar_mensagem(s, t)
                     )
 
+#perfil
 class PerfilFrame(tk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent, bg=app.colors['bg'])

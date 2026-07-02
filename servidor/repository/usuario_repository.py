@@ -1,9 +1,17 @@
 from models.usuario import Usuario
 class UsuarioRepository:
+    """
+    Responsável por todas as operações de persistência da entidade Usuario.
+    Faz comunicação direta com o SQLite.
+    """
     def __init__(self, banco):
+        # Instância do banco de dados (classe que gerencia conexão SQLite)
         self.banco = banco
     
     def salvar(self, usuario):
+        """
+        Insere um novo usuário no banco de dados.
+        """
         conexao = self.banco.conectar()
         cursor = conexao.cursor()
         cursor.execute("""
@@ -22,6 +30,10 @@ class UsuarioRepository:
         conexao.close()
     
     def buscar_por_username(self, username):
+        """
+        Busca um usuário pelo username (login).
+        Retorna um objeto Usuario ou None.
+        """
         conexao = self.banco.conectar()
         cursor = conexao.cursor()
         cursor.execute(
@@ -35,6 +47,9 @@ class UsuarioRepository:
         return Usuario(resultado[0], resultado[1], resultado[2], resultado[3], resultado[4], resultado[5])
 
     def buscar_por_email(self, email):
+        """
+        Busca usuário pelo email.
+        """
         conexao = self.banco.conectar()
         cursor = conexao.cursor()
         cursor.execute(
@@ -48,6 +63,10 @@ class UsuarioRepository:
         return Usuario(resultado[0], resultado[1], resultado[2], resultado[3], resultado[4], resultado[5])
     
     def buscar_por_id(self, id):
+        """
+        Busca usuário pelo ID.
+        Muito usado em relações entre tabelas (chat, mensagens, etc).
+        """
         conexao = self.banco.conectar()
         cursor = conexao.cursor()
 
@@ -69,6 +88,10 @@ class UsuarioRepository:
         )
 
     def atualizar(self, usuario):
+        """
+        Atualiza dados editáveis do usuário.
+        (nome, email e cep)
+        """
         conexao = self.banco.conectar()
         cursor = conexao.cursor()
 
@@ -87,6 +110,9 @@ class UsuarioRepository:
         conexao.close()
     
     def remover(self, usuario_id):
+        """
+        Remove um usuário do banco de dados permanentemente.
+        """
         conexao = self.banco.conectar()
         cursor = conexao.cursor()
 

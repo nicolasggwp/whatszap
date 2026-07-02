@@ -5,7 +5,16 @@ import bcrypt
 import re
 import requests
 
+# VALIDAÇÃO DE SENHA FORTE
 def senha_forte(senha):
+    """
+    Valida se a senha atende critérios mínimos de segurança:
+    - mínimo 8 caracteres
+    - pelo menos 1 letra maiúscula
+    - pelo menos 1 letra minúscula
+    - pelo menos 1 número
+    - pelo menos 1 caractere especial
+    """
     return (
         len(senha) >= 8 and
         re.search(r"[A-Z]", senha) and
@@ -15,30 +24,56 @@ def senha_forte(senha):
     )
 
 class ClienteHandler:
+    """
+    Classe responsável por:
+    - Receber mensagens do cliente via socket
+    - Interpretar comandos (AUTH, CHAT, USER)
+    - Interagir com banco/repositórios
+    - Enviar respostas ao cliente
+    """
     def __init__(self, cliente_socket, endereco, usuario_repository, conversa_service, mensagem_repository, conversa_repository, usuarios_online):
+        # conexão com cliente
         self.cliente_socket = cliente_socket
+        # endereço do cliente (IP/porta)
         self.endereco = endereco
+        
+        # repositórios e serviços do sistema
         self.usuario_repository = usuario_repository
-        self.usuarios_online = usuarios_online
         self.conversa_service = conversa_service
         self.mensagem_repository = mensagem_repository
         self.conversa_repository = conversa_repository
+        
+        # controle de usuários logados
+        self.usuarios_online = usuarios_online
+        # usuário autenticado nesta conexão (inicialmente nenhum)
         self.usuario = None
 
+    # LOOP PRINCIPAL DO CLIENTE
     def executar(self):
+        """
+        Loop principal que:
+        - recebe mensagens do cliente
+        - interpreta protocolo
+        - executa ações correspondentes
+        """
         print(f"Cliente conectado: {self.endereco}")
         while True:
             dados = self.cliente_socket.recv(1024)
 
+            # se não recebeu dados → cliente desconectou
             if not dados:
                 break
 
+            # decodifica mensagem recebida
             mensagem = dados.decode()
-            
             print(mensagem)
+            
+            # separa protocolo
             partes = mensagem.split(";")
             categoria = partes[0]
             acao = partes[1]
+            
+            # LOGIN
             if categoria == "AUTH" and acao == "LOGIN":
                 username = partes[2]
                 senha = partes[3]
@@ -56,17 +91,20 @@ class ClienteHandler:
 
                     continue
 
+                # valida senha hash
                 if bcrypt.checkpw(
                     senha.encode(),
                     usuario.senha_hash.encode()
                 ):
                     print("Usuário encontrado")
-                    
                     self.usuario = usuario
+                    
+                    # envia dados do usuário autenticado
                     self.cliente_socket.send(
                         f"AUTH;SUCCESS;LOGIN_OK;{self.usuario.id};{self.usuario.nome};{self.usuario.username};{self.usuario.email};{self.usuario.cep}\n".encode()
                     )
                    
+                    # marca usuário como online
                     self.usuarios_online[usuario.id] = self.cliente_socket
                     print(self.usuarios_online)
                     continue
@@ -75,6 +113,7 @@ class ClienteHandler:
                         "CTRL;ERROR;LOGIN_ERRO\n".encode()
                     )
 
+            # REGISTRO
             elif categoria == "AUTH" and acao == "REGISTER":
                 nome = partes[2]
                 username = partes[3]
@@ -82,12 +121,14 @@ class ClienteHandler:
                 senha = partes[5]
                 cep = partes[6]
 
+                # valida senha forte
                 if not senha_forte(senha):
                     self.cliente_socket.send(
                         "CTRL;ERROR;WEAK_PASSWORD\n".encode()
                     )
                     continue
 
+                # verifica duplicidade
                 if self.usuario_repository.buscar_por_username(username) is not None:
                     self.cliente_socket.send(
                         "CTRL;ERROR;USERNAME_EXISTS\n".encode())
@@ -98,6 +139,7 @@ class ClienteHandler:
                     )
                     continue
 
+                # valida CEP via API externa
                 resposta = requests.get(
                 f"https://viacep.com.br/ws/{cep}/json/")
 
@@ -109,11 +151,13 @@ class ClienteHandler:
                     )
                     continue
 
+                # gera hash da senha
                 senha_hash = bcrypt.hashpw(
                     senha.encode(),
                     bcrypt.gensalt()
                 ).decode()
 
+                # cria usuário
                 usuario = Usuario(
                     None,
                     nome,
@@ -128,10 +172,12 @@ class ClienteHandler:
                 )
                 continue
 
+            # BLOQUEIO CASO NÃO LOGADO
             elif self.usuario is None:
                 self.cliente_socket.send("CTRL;ERROR;NOT_AUTHENTICATED\n")
                 continue
             
+            # ENVIAR MENSAGEM
             elif categoria == "CHAT" and acao == "SEND":
                 destinatario_id = int(partes[2])
                 texto = ";".join(partes[3:])
@@ -144,13 +190,19 @@ class ClienteHandler:
                     )
                     continue
 
+                # cria ou obtém conversa
                 conversa = self.conversa_service.obter_ou_criar_conversa(self.usuario.id, destinatario_id)
+                
+                # salva mensagem no banco
                 mensagem = Mensagem(None, conversa.id, self.usuario.id, texto)
                 self.mensagem_repository.salvar(mensagem)
+                
+                # envia mensagem em tempo real se destinatário estiver online
                 socket_destino = self.usuarios_online.get(destinatario_id)
                 if socket_destino is not None:
                     socket_destino.send(f"MSG;RECEIVE;{self.usuario.id};{texto}\n".encode())
             
+            # LISTAR CONVERSAS
             elif categoria == "CHAT" and acao == "LIST":
                 print("oiiii")
                 conversas = self.conversa_repository.buscar_por_usuario(self.usuario.id)
@@ -164,6 +216,7 @@ class ClienteHandler:
                     self.cliente_socket.send(f"CHAT;CONVERSA;{outro_usuario.id};{outro_usuario.username}\n".encode())
                 self.cliente_socket.send("CHAT;LIST_END\n".encode())
 
+            # ABRIR CONVERSA + HISTÓRICO
             elif categoria == "CHAT" and acao == "OPEN":
                 destinatario_id = int(partes[2])
 
@@ -191,6 +244,7 @@ class ClienteHandler:
 
                 self.cliente_socket.send("CHAT;HISTORY_END\n".encode())
                         
+            # ATUALIZAR USUÁRIO
             elif categoria == "USER" and acao == "UPDATE":
                 nome = partes[2]
                 email = partes[3]
@@ -206,6 +260,7 @@ class ClienteHandler:
                     "USER;UPDATE_OK\n".encode()
                 )
             
+            # DELETAR CONTA
             elif categoria == "USER" and acao == "DELETE":
                 self.usuario_repository.remover(self.usuario.id)
 
@@ -216,6 +271,7 @@ class ClienteHandler:
                 self.cliente_socket.close()
                 break
             
+        # LIMPEZA FINAL
         if self.usuario is not None:
             self.usuarios_online.pop(
                 self.usuario.id,

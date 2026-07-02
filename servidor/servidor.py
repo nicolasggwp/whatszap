@@ -5,8 +5,10 @@ from repository.mensagem_repository import *
 from repository.conversa_repository import *
 from services.conversa_service import *
 
+#inicia banco
 banco = BancoDados()
 
+#inicia repositorios
 usuario_repository = UsuarioRepository(
     banco
 )
@@ -17,6 +19,7 @@ conversa_service = ConversaService(
     conversa_repository
 )
 
+#inicia servidor
 servidor = ServidorSocket(
     usuario_repository, conversa_service,
     mensagem_repository,
